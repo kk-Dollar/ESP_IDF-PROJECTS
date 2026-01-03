@@ -1,0 +1,59 @@
+# Build artifacts
+build/
+dist/
+*.o
+*.a
+*.so
+*.elf
+*.bin
+*.hex
+
+# Components (submodules/external dependencies)
+components/
+
+# ESP-IDF specific
+sdkconfig.old
+sdkconfig.bak
+sdkconfig.*.old
+partition_table/
+
+# IDE and editor files
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+.DS_Store
+*.sublime-project
+*.sublime-workspace
+
+# Python environment and cache
+__pycache__/
+*.py[cod]
+*$py.class
+*.egg-info/
+.env
+venv/
+env/
+.venv
+
+# Build logs
+compile_commands.json
+cmake_install.cmake
+CMakeCache.txt
+CMakeFiles/
+
+# OS specific
+Thumbs.db
+.AppleDouble
+.LSOverride
+
+# Temporary files
+*.tmp
+*.log
+*.bak
+*.backup
+
+# Debug files
+*.gdb_history
+.gdbinit
