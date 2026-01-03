@@ -10,9 +10,10 @@
 // esp-idf dependcies
 #include "esp_log.h"
 #include "esp_timer.h"
+#include <stdint.h>
 
 #include <rmw_microros/rmw_microros.h> //ros-esp-dds middleware
-#include <uros_network_interfaces.h>   //pura transport sambhal lega ye
+#include <uros_network_interfaces.h>   //wifi transport provided by official
 
 static const char *TAG = "micro-ros";
 
@@ -26,14 +27,39 @@ static rclc_support_t support;
 static rcl_node_t node;
 static rclc_executor_t executor;
 static rcl_subscription_t cmd_sub;
-static std_msgs__msg__Float64MultiArray cmd_msg; //memory storage for executor : agent se jo bhi data aayega executor isme dalega , phir callback ko isse box /ka address de dega 
-
+static std_msgs__msg__Float64MultiArray cmd_msg; // memory storage for executor : agent se jo bhi data aayega executor isme dalega , phir callback ko isse box /ka address de dega
+#define CMD_TIMEOUT_MS 200 
 // time conversion: qki esp nano second mai kaam karta
 
 static int64_t now_ms(void)
 {
     return esp_timer_get_time() / 1000;
 }
+static inline bool microros_command_valid(void) // used for watch-dog
+{
+    return (now_ms() - last_cmd_time_ms) < CMD_TIMEOUT_MS;
+}
+double microros_get_left_cmd(void)
+{
+    if (!microros_command_valid()) {
+        return 0.0;
+    }
+    return left_cmd;
+}
+double microros_get_right_cmd(void)
+{
+    if (!microros_command_valid()) {
+        return 0.0;
+    }
+    return right_cmd;
+}
+
+int64_t microros_last_cmd_age_ms(void)
+{
+    return now_ms() - last_cmd_time_ms;
+}
+
+
 
 static void wheel_cmd_callback(const void *msgin)
 {
@@ -49,7 +75,7 @@ static void wheel_cmd_callback(const void *msgin)
     right_cmd = msg->data.data[1];
     last_cmd_time_ms = now_ms();
 
-    ESP_LOGI(TAG, "Received command - left: %.3f, right: %.3f", left_cmd, right_cmd);
+    //ESP_LOGI(TAG, "Received command - left: %.3f, right: %.3f", left_cmd, right_cmd);
 }
 void microros_init(void)
 {
@@ -57,37 +83,42 @@ void microros_init(void)
     rcl_ret_t ret;
 
     // Configure agent IP and port
-    rcl_init_options_t init_options = rcl_get_zero_initialized_init_options();
-    ret = rcl_init_options_init(&init_options, allocator);
-    if (ret != RCL_RET_OK) {
+    rcl_init_options_t init_options = rcl_get_zero_initialized_init_options(); // init_option :: container for rmw, rmw iske andar rehta:: zero initialise mtlb sirf struct banao with no data entered/ totally blank--> jo initialise karne ke liye zaruri hai
+    ret = rcl_init_options_init(&init_options, allocator);                     // ab yha usko initialise kar diye, rmw ke liye space ban gya
+    if (ret != RCL_RET_OK)
+    {
         ESP_LOGE(TAG, "Failed to init options: %ld", (long)ret);
         return;
     }
-    
-    rmw_init_options_t* rmw_options = rcl_init_options_get_rmw_init_options(&init_options);
-    ret = rmw_uros_options_set_udp_address("192.168.21.70", "8888", rmw_options);
-    if (ret != RMW_RET_OK) {
+
+    rmw_init_options_t *rmw_options = rcl_init_options_get_rmw_init_options(&init_options); // rmw ka pointer le rahe taki usme usd detail add kar sake
+    ret = rmw_uros_options_set_udp_address(CONFIG_MICRO_ROS_AGENT_IP, CONFIG_MICRO_ROS_AGENT_PORT, rmw_options); //updated the value from menuconfig
+    if (ret != RMW_RET_OK)
+    {
         ESP_LOGE(TAG, "Failed to set UDP address: %ld", (long)ret);
         return;
     }
     ESP_LOGI(TAG, "Connecting to agent at 192.168.21.70:8888");
-    
-    ret = rclc_support_init_with_options(&support, 0, NULL, &init_options, &allocator);
-    if (ret != RCL_RET_OK) {
+
+    ret = rclc_support_init_with_options(&support, 0, NULL, &init_options, &allocator); // ad init_option ko support mai add kar denge, qki rmw_options is READ ONCE but support is used EVERYWHERE , used forever 
+    if (ret != RCL_RET_OK)
+    {
         ESP_LOGE(TAG, "Failed to init support: %ld", (long)ret);
         return;
     }
     ESP_LOGI(TAG, "Support initialized successfully");
 
     ret = rclc_node_init_default(&node, "esp32_node", "", &support);
-    if (ret != RCL_RET_OK) {
+    if (ret != RCL_RET_OK)
+    {
         ESP_LOGE(TAG, "Failed to init node: %ld", (long)ret);
         return;
     }
     ESP_LOGI(TAG, "Node created: esp32_node");
 
     ret = rclc_subscription_init_default(&cmd_sub, &node, ROSIDL_GET_MSG_TYPE_SUPPORT(std_msgs, msg, Float64MultiArray), "/wheel_commands");
-    if (ret != RCL_RET_OK) {
+    if (ret != RCL_RET_OK)
+    {
         ESP_LOGE(TAG, "Failed to create subscriber: %ld", (long)ret);
         return;
     }
@@ -95,24 +126,27 @@ void microros_init(void)
 
     // Initialize message memory BEFORE adding to executor
     std_msgs__msg__Float64MultiArray__init(&cmd_msg);
-    cmd_msg.data.capacity = 10;  // Allocate space for up to 10 values
+    cmd_msg.data.capacity = 10; // Allocate space for up to 10 values
     cmd_msg.data.size = 0;
-    cmd_msg.data.data = (double*)allocator.allocate(cmd_msg.data.capacity * sizeof(double), allocator.state);
-    if (cmd_msg.data.data == NULL) {
+    cmd_msg.data.data = (double *)allocator.allocate(cmd_msg.data.capacity * sizeof(double), allocator.state);
+    if (cmd_msg.data.data == NULL)
+    {
         ESP_LOGE(TAG, "Failed to allocate memory for message data");
         return;
     }
     ESP_LOGI(TAG, "Message buffer allocated (capacity: %ld)", (long)cmd_msg.data.capacity);
 
-    //executor
-    ret = rclc_executor_init(&executor, &support.context, 1, &allocator);
-    if (ret != RCL_RET_OK) {
+    // executor
+    ret = rclc_executor_init(&executor, &support.context,1, &allocator);
+    if (ret != RCL_RET_OK)
+    {
         ESP_LOGE(TAG, "Failed to init executor: %ld", (long)ret);
         return;
     }
-    
+
     ret = rclc_executor_add_subscription(&executor, &cmd_sub, &cmd_msg, &wheel_cmd_callback, ON_NEW_DATA);
-    if (ret != RCL_RET_OK) {
+    if (ret != RCL_RET_OK)
+    {
         ESP_LOGE(TAG, "Failed to add subscription to executor: %ld", (long)ret);
         return;
     }
@@ -121,5 +155,5 @@ void microros_init(void)
 }
 void microros_spin(void)
 {
-    rclc_executor_spin_some(&executor,RCL_MS_TO_NS(5));
+    rclc_executor_spin_some(&executor, RCL_MS_TO_NS(5));
 }
