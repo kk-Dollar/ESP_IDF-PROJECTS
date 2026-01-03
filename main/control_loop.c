@@ -5,7 +5,7 @@
 
 static const char *TAG = "control_loop";
 
-// for accelerating limiting
+// for accelerating limitingr
 static double prev_left = 0.0;
 static double prev_right = 0.0;
 
@@ -29,7 +29,8 @@ void control_loop_update(double dt)
     //          "CTRL | left: %.3f  right: %.3f",
     //          left_cmd, right_cmd);
 
-    motor_driver_set_velocity(left_cmd,right_cmd);         
+    motor_driver_set_velocity(left_cmd,right_cmd);  
+    // motor_driver_set_velocity(3.0,3.0);        
 
     /* Save for future filters */
     prev_left = left_cmd;

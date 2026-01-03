@@ -28,7 +28,7 @@ static rcl_node_t node;
 static rclc_executor_t executor;
 static rcl_subscription_t cmd_sub;
 static std_msgs__msg__Float64MultiArray cmd_msg; // memory storage for executor : agent se jo bhi data aayega executor isme dalega , phir callback ko isse box /ka address de dega
-#define CMD_TIMEOUT_MS 200 
+#define CMD_TIMEOUT_MS 150 
 // time conversion: qki esp nano second mai kaam karta
 
 static int64_t now_ms(void)

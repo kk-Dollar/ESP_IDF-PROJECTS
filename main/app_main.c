@@ -1,5 +1,6 @@
 #include "microros_node.h"
 #include "control_loop.h"
+#include "motor_driver.h"
 
 #include <uros_network_interfaces.h>
 
@@ -48,7 +49,9 @@ void app_main(void)
     vTaskDelay(pdMS_TO_TICKS(3000)); // Wait for WiFi to connect
 
     uros_network_interface_initialize();
-
+    
+   // motor_driver_init();
+   // motor_driver_test();
     xTaskCreate(micro_ros_task, "micro_ros_task", 8192, NULL, 5, NULL);
     xTaskCreate(control_loop_task,"control_loop_task",4096,NULL,6,NULL); //slightly higher priority than ros
 }
